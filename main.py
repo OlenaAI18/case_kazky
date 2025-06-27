@@ -1,27 +1,15 @@
 from fastapi import FastAPI, Request
 import os
 import telegram
-from telegram import ReplyKeyboardMarkup
-import random
 
 app = FastAPI()
 
+# Отримуємо токен
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 bot = telegram.Bot(token=TOKEN)
 
-# Фейкові казки
-stories = {
-    "girl": [
-        {"title": "Казка про зірку", "text": "Жила-була дівчинка на ім’я {{name}}, яка знайшла чарівну зірку..."},
-        {"title": "Казка про ліс", "text": "{{name}} пішла до лісу, де всі тваринки заговорили з нею..."}
-    ],
-    "boy": [
-        {"title": "Казка про дракона", "text": "Хлопчик {{name}} зустрів доброго дракона, який вмів літати..."},
-        {"title": "Казка про машинку", "text": "{{name}} знайшов чарівну машинку, що вміла говорити..."}
-    ]
-}
-
-user_sessions = {}
+# Простий стан користувачів
+user_state = {}  # chat_id -> {"step": ..., "name": ..., "gender": ...}
 
 @app.get("/")
 async def root():
@@ -32,42 +20,54 @@ async def receive_update(request: Request):
     data = await request.json()
     update = telegram.Update.de_json(data, bot)
 
-    if update.message:
-        chat_id = update.message.chat.id
-        text = update.message.text.strip()
+    if not update.message:
+        return {"ok": True}
 
-        session = user_sessions.get(chat_id, {})
+    chat_id = update.message.chat.id
+    text = update.message.text.strip()
 
-        if text == "/start" or not session:
-            user_sessions[chat_id] = {}
-            reply_markup = ReplyKeyboardMarkup([["👧 Дівчинка"], ["👦 Хлопчик"]], resize_keyboard=True)
-            bot.send_message(chat_id=chat_id, text="Привіт! 👋 Я бот "Казки" з чарівними казками. Для кого шукаємо історію?", reply_markup=reply_markup)
+    if chat_id not in user_state:
+        user_state[chat_id] = {"step": "start"}
 
-        elif text in ["👧 Дівчинка", "👦 Хлопчик"]:
-            gender = "girl" if "Дівчинка" in text else "boy"
-            user_sessions[chat_id] = {"gender": gender}
-            bot.send_message(chat_id=chat_id, text="Введи ім’я дитини:")
+    step = user_state[chat_id]["step"]
 
-        elif "gender" in session and "name" not in session:
-            name = text.capitalize()
-            user_sessions[chat_id]["name"] = name
-            gender = session["gender"]
-            story = random.choice(stories[gender])
-            story_text = story["text"].replace("{{name}}", name)
-            reply_markup = ReplyKeyboardMarkup([["✨ Ще одну казку"]], resize_keyboard=True)
-            bot.send_message(chat_id=chat_id, text=f"📖 *{story['title']}*\n\n{story_text}", parse_mode="Markdown", reply_markup=reply_markup)
+    # Початок
+    if text == "/start" or step == "start":
+        bot.send_message(chat_id=chat_id, text="Привіт! Я твій казковий помічник ✨\nЯк тебе звати?")
+        user_state[chat_id]["step"] = "ask_name"
+        return {"ok": True}
 
-        elif text == "✨ Ще одну казку" and "gender" in session and "name" in session:
-            gender = session["gender"]
-            name = session["name"]
-            story = random.choice(stories[gender])
-            story_text = story["text"].replace("{{name}}", name)
-            bot.send_message(chat_id=chat_id, text=f"📖 *{story['title']}*\n\n{story_text}", parse_mode="Markdown")
+    # Крок 1: ім'я
+    if step == "ask_name":
+        user_state[chat_id]["name"] = text
+        bot.send_message(chat_id=chat_id, text="Чудово, " + text + "! А яка у тебе стать? (хлопчик / дівчинка)")
+        user_state[chat_id]["step"] = "ask_gender"
+        return {"ok": True}
 
-        else:
-            bot.send_message(chat_id=chat_id, text="Напиши /start, щоб розпочати ✨")
+    # Крок 2: стать
+    if step == "ask_gender":
+        gender = text.lower()
+        if gender not in ["хлопчик", "дівчинка"]:
+            bot.send_message(chat_id=chat_id, text="Вибач, я зрозумію тільки 'хлопчик' або 'дівчинка'.")
+            return {"ok": True}
+
+        user_state[chat_id]["gender"] = gender
+        name = user_state[chat_id]["name"]
+
+        # Казка
+        fairy_tale = f"Одного разу {gender} на ім'я {name} вирушив у чарівну пригоду... 🌈🦄"
+
+        bot.send_message(chat_id=chat_id, text=fairy_tale)
+        user_state[chat_id]["step"] = "done"
+        return {"ok": True}
+
+    # Повторне натискання після завершення
+    if step == "done":
+        bot.send_message(chat_id=chat_id, text="Хочеш ще раз? Напиши /start")
+        return {"ok": True}
 
     return {"ok": True}
+
 
 
 
