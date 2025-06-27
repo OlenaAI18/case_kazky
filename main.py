@@ -1,29 +1,24 @@
-from fastapi import FastAPI, Request
-import os
-import telegram
+from telegram import ReplyKeyboardMarkup
 
-app = FastAPI()
+if update.message:
+    chat_id = update.message.chat.id
+    text = update.message.text.lower()
 
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-bot = telegram.Bot(token=TOKEN)
+    if text in ["/start", "почати", "привіт"]:
+        keyboard = [["Хочу казку"]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        bot.send_message(chat_id=chat_id, text="Привіт! Я Віталінка. Хочеш казку?", reply_markup=reply_markup)
 
-@app.get("/")
-async def root():
-    return {"status": "ok"}
+    elif text == "хочу казку":
+        bot.send_message(chat_id=chat_id, text="Скажи, як звати дитину?")
 
-@app.post("/")
-async def receive_update(request: Request):
-    try:
-        data = await request.json()
-        update = telegram.Update.de_json(data, bot)
+    elif text.isalpha() and len(text) > 2:
+        child_name = text.capitalize()
+        fairy_tale = f"Жила-була дівчинка на ім’я {child_name}. Одного разу вона знайшла чарівний ліхтарик..."
+        bot.send_message(chat_id=chat_id, text=fairy_tale)
 
-        if update.message:
-            chat_id = update.message.chat.id
-            text = update.message.text
-            bot.send_message(chat_id=chat_id, text="Привіт! Я працюю 👋")
+    else:
+        bot.send_message(chat_id=chat_id, text="Не зовсім зрозуміла. Натисни кнопку або введи ім'я дитини 💬")
 
-        return {"ok": True}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
 
 
