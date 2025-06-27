@@ -1,15 +1,14 @@
 from fastapi import FastAPI, Request
 import os
 import telegram
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 app = FastAPI()
 
-# Отримуємо токен
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 bot = telegram.Bot(token=TOKEN)
 
-# Простий стан користувачів
-user_state = {}  # chat_id -> {"step": ..., "name": ..., "gender": ...}
+user_data = {}  # user_id -> {"gender": "", "name": ""}
 
 @app.get("/")
 async def root():
@@ -20,51 +19,37 @@ async def receive_update(request: Request):
     data = await request.json()
     update = telegram.Update.de_json(data, bot)
 
-    if not update.message:
-        return {"ok": True}
+    if update.message:
+        chat_id = update.message.chat.id
+        text = update.message.text
 
-    chat_id = update.message.chat.id
-    text = update.message.text.strip()
+        if text == "/start":
+            keyboard = [
+                [InlineKeyboardButton("👦 Хлопчик", callback_data='male')],
+                [InlineKeyboardButton("👧 Дівчинка", callback_data='female')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            bot.send_message(chat_id=chat_id, text="Хто буде головним героєм казки?", reply_markup=reply_markup)
+            user_data[chat_id] = {}  # ініціалізуємо пустий словник
+        elif chat_id in user_data and "gender" in user_data[chat_id] and "name" not in user_data[chat_id]:
+            user_data[chat_id]["name"] = text
+            gender = user_data[chat_id]["gender"]
+            name = user_data[chat_id]["name"]
 
-    if chat_id not in user_state:
-        user_state[chat_id] = {"step": "start"}
+            # 👉 Тут можна вставити генерацію з GPT або шаблон
+            fairy_tale = f"Жив-був {name}, маленький {'хлопчик' if gender == 'male' else 'дівчинка'}, який мріяв змінити світ... 🌟"
+            bot.send_message(chat_id=chat_id, text=fairy_tale)
 
-    step = user_state[chat_id]["step"]
+    elif update.callback_query:
+        query = update.callback_query
+        chat_id = query.message.chat.id
+        gender = query.data
 
-    # Початок
-    if text == "/start" or step == "start":
-        bot.send_message(chat_id=chat_id, text="Привіт! Я твій казковий помічник ✨\nЯк тебе звати?")
-        user_state[chat_id]["step"] = "ask_name"
-        return {"ok": True}
+        if chat_id not in user_data:
+            user_data[chat_id] = {}
 
-    # Крок 1: ім'я
-    if step == "ask_name":
-        user_state[chat_id]["name"] = text
-        bot.send_message(chat_id=chat_id, text="Чудово, " + text + "! А яка у тебе стать? (хлопчик / дівчинка)")
-        user_state[chat_id]["step"] = "ask_gender"
-        return {"ok": True}
-
-    # Крок 2: стать
-    if step == "ask_gender":
-        gender = text.lower()
-        if gender not in ["хлопчик", "дівчинка"]:
-            bot.send_message(chat_id=chat_id, text="Вибач, я зрозумію тільки 'хлопчик' або 'дівчинка'.")
-            return {"ok": True}
-
-        user_state[chat_id]["gender"] = gender
-        name = user_state[chat_id]["name"]
-
-        # Казка
-        fairy_tale = f"Одного разу {gender} на ім'я {name} вирушив у чарівну пригоду... 🌈🦄"
-
-        bot.send_message(chat_id=chat_id, text=fairy_tale)
-        user_state[chat_id]["step"] = "done"
-        return {"ok": True}
-
-    # Повторне натискання після завершення
-    if step == "done":
-        bot.send_message(chat_id=chat_id, text="Хочеш ще раз? Напиши /start")
-        return {"ok": True}
+        user_data[chat_id]["gender"] = gender
+        bot.send_message(chat_id=chat_id, text="А як звати нашу зірочку? ✨")
 
     return {"ok": True}
 
