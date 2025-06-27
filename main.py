@@ -4,7 +4,6 @@ import telegram
 
 app = FastAPI()
 
-# Бот Telegram
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 bot = telegram.Bot(token=TOKEN)
 
@@ -14,13 +13,17 @@ async def root():
 
 @app.post("/")
 async def receive_update(request: Request):
-    data = await request.json()
-    update = telegram.Update.de_json(data, bot)
-    
-    if update.message:
-        chat_id = update.message.chat.id
-        text = update.message.text
-        bot.send_message(chat_id=chat_id, text="Привіт! Я працюю 👋")
+    try:
+        data = await request.json()
+        update = telegram.Update.de_json(data, bot)
 
-    return {"ok": True}
+        if update.message:
+            chat_id = update.message.chat.id
+            text = update.message.text
+            bot.send_message(chat_id=chat_id, text="Привіт! Я працюю 👋")
+
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 
