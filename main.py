@@ -9,7 +9,7 @@ app = FastAPI()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 bot = telegram.Bot(token=TOKEN)
 
-# Просте збереження стану користувача
+# Зберігаємо дані користувача
 user_data = {}
 
 @app.get("/")
@@ -19,13 +19,19 @@ async def root():
 @app.post("/")
 async def webhook(request: Request):
     data = await request.json()
+    print("📩 Update received:", data)  # Додаємо лог
+
     update = telegram.Update.de_json(data, bot)
 
+    # Якщо прийшло звичайне повідомлення
     if update.message:
         chat_id = update.message.chat.id
-        text = update.message.text.strip()
+        text = update.message.text.strip() if update.message.text else ""
 
-        if text.lower() == "/start":
+        print("🗨️ Text message:", text)
+
+        # Старт
+        if text and text.lower() == "/start":
             user_data[chat_id] = {"step": "gender"}
             keyboard = [
                 [InlineKeyboardButton("👧 Дівчинка", callback_data="girl")],
@@ -37,6 +43,7 @@ async def webhook(request: Request):
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
+        # Якщо вже обрали стать, просимо ім’я
         elif user_data.get(chat_id, {}).get("step") == "name":
             name = text
             user_data[chat_id]["name"] = name
@@ -48,20 +55,25 @@ async def webhook(request: Request):
             keyboard = [[InlineKeyboardButton("📖 Розкажи ще", callback_data="more_story")]]
             bot.send_message(chat_id, story, reply_markup=InlineKeyboardMarkup(keyboard))
 
+    # Якщо прийшов клік на кнопку
     elif update.callback_query:
         query = update.callback_query
         chat_id = query.message.chat.id
         data = query.data
 
+        print("🔘 Callback:", data)
+
+        # Обрали стать
         if data in ["girl", "boy"]:
             user_data[chat_id] = {"gender": data, "step": "name"}
             prompt = "А як звати нашу зірочку? ✨" if data == "girl" else "А як звати нашого героя? ✨"
             bot.send_message(chat_id, prompt)
 
+        # Обрали "ще одну казку"
         elif data == "more_story":
             user_info = user_data.get(chat_id)
-            if not user_info:
-                bot.send_message(chat_id, "Натисніть /start, щоб почати спочатку.")
+            if not user_info or "name" not in user_info:
+                bot.send_message(chat_id, "Натисніть /start, щоб почати заново.")
                 return {"ok": True}
 
             gender = user_info["gender"]
@@ -70,7 +82,7 @@ async def webhook(request: Request):
             idx = user_info.get("story_index", 0) + 1
 
             if idx >= len(stories):
-                idx = 0  # починаємо знову
+                idx = 0  # якщо історії закінчились — починаємо спочатку
 
             user_info["story_index"] = idx
             story = stories[idx].replace("{name}", name)
@@ -78,6 +90,7 @@ async def webhook(request: Request):
             bot.send_message(chat_id, story, reply_markup=InlineKeyboardMarkup(keyboard))
 
     return {"ok": True}
+
 
 
 
