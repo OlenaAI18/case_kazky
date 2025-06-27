@@ -1,14 +1,17 @@
 from fastapi import FastAPI, Request
 import os
 import telegram
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import ReplyKeyboardMarkup
+from stories import get_story
 
 app = FastAPI()
 
+# Бот Telegram
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 bot = telegram.Bot(token=TOKEN)
 
-user_data = {}  # user_id -> {"gender": "", "name": ""}
+# Тимчасове зберігання даних користувача
+user_data = {}
 
 @app.get("/")
 async def root():
@@ -23,35 +26,30 @@ async def receive_update(request: Request):
         chat_id = update.message.chat.id
         text = update.message.text
 
-        if text == "/start":
-            keyboard = [
-                [InlineKeyboardButton("👦 Хлопчик", callback_data='male')],
-                [InlineKeyboardButton("👧 Дівчинка", callback_data='female')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            bot.send_message(chat_id=chat_id, text="Хто буде головним героєм казки?", reply_markup=reply_markup)
-            user_data[chat_id] = {}  # ініціалізуємо пустий словник
-        elif chat_id in user_data and "gender" in user_data[chat_id] and "name" not in user_data[chat_id]:
-            user_data[chat_id]["name"] = text
-            gender = user_data[chat_id]["gender"]
-            name = user_data[chat_id]["name"]
-
-            # 👉 Тут можна вставити генерацію з GPT або шаблон
-            fairy_tale = f"Жив-був {name}, маленький {'хлопчик' if gender == 'male' else 'дівчинка'}, який мріяв змінити світ... 🌟"
-            bot.send_message(chat_id=chat_id, text=fairy_tale)
-
-    elif update.callback_query:
-        query = update.callback_query
-        chat_id = query.message.chat.id
-        gender = query.data
-
+        # Якщо користувач ще не вибрав стать
         if chat_id not in user_data:
+            reply_markup = ReplyKeyboardMarkup([["👦 Хлопчик", "👧 Дівчинка"]], resize_keyboard=True)
+            bot.send_message(chat_id=chat_id, text="Хто слухатиме казку? 🌟", reply_markup=reply_markup)
             user_data[chat_id] = {}
+            return {"ok": True}
 
-        user_data[chat_id]["gender"] = gender
-        bot.send_message(chat_id=chat_id, text="А як звати нашу зірочку? ✨")
+        # Вибір статі
+        if "gender" not in user_data[chat_id]:
+            if "хлопчик" in text.lower():
+                user_data[chat_id]["gender"] = "male"
+            elif "дівчинка" in text.lower():
+                user_data[chat_id]["gender"] = "female"
+            else:
+                bot.send_message(chat_id=chat_id, text="Будь ласка, обери: 👦 Хлопчик або 👧 Дівчинка")
+                return {"ok": True}
 
-    return {"ok": True}
+            bot.send_message(chat_id=chat_id, text="А як звати нашу зірочку? ✨")
+            return {"ok": True}
+
+        # Запис імені та генерація казки
+        if "name" not in user_data[chat_id]:
+            user_data[chat_i_]()_
+
 
 
 
